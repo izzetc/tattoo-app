@@ -144,21 +144,6 @@ def send_email_with_design(to_email, img_buffer, prompt):
     except Exception as e:
         return False, str(e)
 
-    # Resmi Ekle
-    image_data = img_buffer.getvalue()
-    image = MIMEImage(image_data, name="fallink_design.png")
-    msg.attach(image)
-
-    try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(EMAIL_USER, EMAIL_PASSWORD)
-        server.send_message(msg)
-        server.quit()
-        return True, "Email sent successfully!"
-    except Exception as e:
-        return False, str(e)
-
 def check_user_credits(username):
     try:
         response = supabase.table("users").select("*").eq("username", username).execute()
