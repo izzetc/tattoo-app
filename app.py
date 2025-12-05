@@ -6,10 +6,10 @@ import base64
 import time
 import random
 import smtplib
+import re  # NÜKLEER TEMİZLİK İÇİN GEREKLİ
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
-from email.header import Header
 from supabase import create_client, Client
 
 # --- GİZLİ BİLGİLERİ (SECRETS) ÇEKME ---
@@ -20,12 +20,12 @@ try:
     EMAIL_USER = st.secrets["EMAIL_USER"]
     EMAIL_PASSWORD = st.secrets["EMAIL_PASSWORD"]
 except:
-    st.error("⚠️ Eksik Anahtarlar! Lütfen Streamlit Secrets ayarlarını kontrol et.")
+    st.error("⚠️ Secrets Hatası! Lütfen API anahtarlarını kontrol et.")
     st.stop()
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(
-    page_title="Fallink Studio",
+    page_title="Fallink Studio v2.5",
     page_icon="✒️",
     layout="centered",
     initial_sidebar_state="collapsed"
@@ -59,8 +59,6 @@ st.markdown("""
         border-radius: 8px !important;
     }
     
-    ::placeholder { color: #888 !important; opacity: 1; }
-
     .main-title {
         font-size: 2.5rem;
         font-weight: 800;
@@ -75,61 +73,47 @@ st.markdown("""
         border-radius: 10px !important;
         padding: 10px 20px !important;
         border: none !important;
-        font-weight: 600 !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-    }
-    .stButton > button:hover {
-        background-color: #333 !important;
-        transform: translateY(-2px);
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- FONKSİYONLAR ---
 
-def clean_text(text):
-    """Görünmez karakterleri ve Türkçe sorunlarını temizler."""
+def sanitize_ascii(text):
+    """Metindeki ASCII olmayan her şeyi (emojiler, özel harfler) siler."""
     if text:
-        # \xa0 (non-breaking space) karakterini normal boşluğa çevir
-        text = text.replace('\xa0', ' ')
-        # Başındaki ve sonundaki boşlukları sil
-        text = text.strip()
-        return text
+        # Sadece İngilizce harfler, rakamlar ve temel sembolleri bırak
+        return re.sub(r'[^\x00-\x7F]+', '', text).strip()
     return ""
 
 def send_email_with_design(to_email, img_buffer, prompt):
-    """E-postayı UTF-8 formatında güvenli gönderir."""
-    
-    # Girdileri temizle (ÖNEMLİ ADIM)
-    safe_email = clean_text(to_email)
-    safe_prompt = clean_text(prompt)
+    # 1. Girdileri Zorla Temizle (ASCII Zorunluluğu)
+    safe_email = sanitize_ascii(to_email)
+    safe_prompt = sanitize_ascii(prompt) # Prompttaki emojileri de siler
     
     msg = MIMEMultipart()
     msg['From'] = EMAIL_USER
     msg['To'] = safe_email
+    msg['Subject'] = "Your Fallink Tattoo Design" # Emoji YOK, sadece düz yazı
     
-    # Konu başlığını UTF-8 olarak şifrele (Header sınıfı ile)
-    msg['Subject'] = Header("Your Fallink Tattoo Design is Ready", 'utf-8')
-
+    # Body kısmını HTML ve UTF-8 olarak ayarla
     body = f"""
     <html>
       <body>
         <h2>Your Design is Here!</h2>
-        <p>Here is the AI-generated tattoo stencil you created with Fallink.</p>
+        <p>Here is the tattoo stencil you created with Fallink.</p>
         <p><strong>Idea:</strong> {safe_prompt}</p>
         <br>
-        <p>See you at the studio!</p>
-        <p><em>Fallink Team</em></p>
+        <p>Fallink Team</p>
       </body>
     </html>
     """
     
-    # Gövdeyi UTF-8 yap
     msg.attach(MIMEText(body, 'html', 'utf-8'))
 
     # Resmi Ekle
     image_data = img_buffer.getvalue()
-    image = MIMEImage(image_data, name="fallink_design.png")
+    image = MIMEImage(image_data, name="design.png")
     msg.attach(image)
 
     try:
@@ -144,8 +128,7 @@ def send_email_with_design(to_email, img_buffer, prompt):
 
 def check_user_credits(username):
     try:
-        # Username temizliği
-        username = clean_text(username)
+        username = sanitize_ascii(username)
         response = supabase.table("users").select("*").eq("username", username).execute()
         if response.data:
             return response.data[0]["credits"]
@@ -171,8 +154,8 @@ def generate_tattoo_stencil(user_prompt, style, placement):
     try:
         client = genai.Client(api_key=GOOGLE_API_KEY)
         
-        # Prompt temizliği
-        clean_user_prompt = clean_text(user_prompt)
+        # Prompt Temizliği
+        clean_user_prompt = sanitize_ascii(user_prompt)
         
         base_prompt = f"Professional tattoo stencil design of: {clean_user_prompt}. Placement: {placement}."
         style_prompt = f"Style: {style}. Requirements: Clean white background, high contrast black ink, isolated subject, vector style, no skin texture."
@@ -201,15 +184,14 @@ if "generated_img" not in st.session_state:
 # 1. LOGIN
 if "logged_in_user" not in st.session_state:
     st.markdown("<div style='margin-top: 50px;'></div>", unsafe_allow_html=True)
-    st.markdown("<h1 class='main-title'>Fallink.</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-title'>Fallink v2.5</h1>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         with st.container(border=True):
             username_input = st.text_input("Access Code", placeholder="Enter code...")
             if st.button("Enter Studio", use_container_width=True):
-                # Girişte de temizlik yap
-                safe_username = clean_text(username_input)
+                safe_username = sanitize_ascii(username_input)
                 credits = check_user_credits(safe_username)
                 if credits == -1:
                     st.error("Invalid code.")
@@ -252,7 +234,7 @@ with c_right:
         else:
             with st.spinner("Designing..."):
                 new_credits = deduct_credit(user, credits)
-                safe_prompt = clean_text(user_prompt)
+                safe_prompt = sanitize_ascii(user_prompt)
                 img, err = generate_tattoo_stencil(safe_prompt, style, placement)
                 if img:
                     st.session_state["generated_img"] = img
@@ -280,8 +262,8 @@ if st.session_state["generated_img"]:
             customer_email = st.text_input("Customer Email", placeholder="client@example.com")
             if st.button("Send Email"):
                 if customer_email:
-                    # Girdiyi temizle (Görünmez boşlukları siler)
-                    safe_email = clean_text(customer_email)
+                    # Girdiyi temizle
+                    safe_email = sanitize_ascii(customer_email)
                     
                     with st.spinner("Sending email..."):
                         buf = BytesIO()
@@ -296,5 +278,5 @@ if st.session_state["generated_img"]:
                 else:
                     st.warning("Enter an email address.")
 
-# --- SÜRÜM KONTROLÜ ---
-st.markdown("<br><hr><center><small style='color:grey'>Fallink App v2.4 (Sanitized)</small></center>", unsafe_allow_html=True)
+# --- SÜRÜM KONTROLÜ (EN ALTTA YAZACAK) ---
+st.markdown("<br><hr><center><small style='color:grey'>Fallink App v2.5 (Nuclear Fix)</small></center>", unsafe_allow_html=True)
