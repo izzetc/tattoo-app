@@ -40,7 +40,7 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- CSS TASARIM (PREMIUM) ---
+# --- CSS TASARIM ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
@@ -51,7 +51,6 @@ st.markdown("""
         color: #111;
     }
     
-    /* Input alanları temiz ve beyaz */
     .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
         background-color: #FFFFFF !important; 
         color: #000000 !important;
@@ -86,7 +85,7 @@ st.markdown("""
 # --- FONKSİYONLAR ---
 
 def send_email_with_design(to_email, img_buffer, prompt):
-    """Müşteriye tasarımı gönderir (Standart UTF-8)."""
+    """Müşteriye tasarımı gönderir."""
     msg = MIMEMultipart()
     msg['From'] = EMAIL_USER
     msg['To'] = to_email
@@ -104,11 +103,8 @@ def send_email_with_design(to_email, img_buffer, prompt):
       </body>
     </html>
     """
-    
-    # Standart UTF-8 kodlaması (Yeterli ve güvenli)
     msg.attach(MIMEText(body, 'html', 'utf-8'))
 
-    # Resmi Ekle
     image_data = img_buffer.getvalue()
     image = MIMEImage(image_data, name="fallink_design.png")
     msg.attach(image)
@@ -150,12 +146,11 @@ def generate_tattoo_stencil(user_prompt, style, placement):
     try:
         client = genai.Client(api_key=GOOGLE_API_KEY)
         
-        # PROMPT MÜHENDİSLİĞİ
         base_prompt = f"Professional tattoo stencil design of: {user_prompt}. Placement: {placement}."
         style_prompt = f"Style: {style}. Requirements: Clean white background, high contrast black ink, isolated subject, vector style, no skin texture."
         final_prompt = f"{base_prompt} {style_prompt}"
 
-        # Imagen 4.0 Modeli
+        # TEK RESİM (EKONOMİK MOD)
         response = client.models.generate_images(
             model="imagen-4.0-generate-001", 
             prompt=final_prompt,
@@ -172,6 +167,7 @@ def generate_tattoo_stencil(user_prompt, style, placement):
 
 # --- UYGULAMA AKIŞI ---
 
+# Session durumu: Son üretilen resmi hafızada tut
 if "generated_img" not in st.session_state:
     st.session_state["generated_img"] = None
     st.session_state["last_prompt"] = ""
@@ -210,16 +206,21 @@ st.markdown("---")
 c_left, c_right = st.columns([1.5, 1])
 
 with c_left:
-    user_prompt = st.text_area("Describe your tattoo idea", height=150, placeholder="E.g. A geometric wolf head...")
+    # Not: Burada session_state kullanmadık ki yazı alanı hep boş kalsın istemiyoruz.
+    # Kullanıcı "Generate" dedikten sonra yazı orada kalsın ki DEĞİŞTİREBİLSİN.
+    user_prompt = st.text_area("Describe your tattoo idea", height=150, value=st.session_state["last_prompt"], placeholder="E.g. A geometric wolf head...")
+    
     if st.button("🎲 Random Idea"):
         ideas = ["Minimalist paper plane", "Snake wrapped around dagger", "Realistic eye crying galaxy", "Geometric deer head"]
         user_prompt = random.choice(ideas)
-        st.info(f"Try: {user_prompt}")
+        st.session_state["last_prompt"] = user_prompt # Yazıyı kutuya koymak için
+        st.rerun()
 
 with c_right:
     style = st.selectbox("Style", ("Fine Line", "Micro Realism", "Dotwork", "Old School", "Sketch", "Tribal"))
     placement = st.selectbox("Placement", ("Arm", "Leg", "Chest", "Back", "Wrist"))
     
+    # Buton Metni: "1 Kredi Harca"
     if st.button("Generate Ink ✨ (1 Credit)", type="primary", use_container_width=True):
         if credits < 1:
             st.error("No credits left!")
@@ -245,6 +246,9 @@ if st.session_state["generated_img"]:
     img = st.session_state["generated_img"]
     st.image(img, caption="Fallink AI Design", width=400)
     
+    # Kullanıcıya ipucu verelim
+    st.info("💡 Don't like it? Change the text above and click Generate again (Costs 1 credit).")
+    
     col_d1, col_d2 = st.columns(2)
     
     with col_d1:
@@ -256,7 +260,6 @@ if st.session_state["generated_img"]:
             if st.button("Send Email"):
                 if customer_email:
                     with st.spinner("Sending email..."):
-                        # Buffer oluştur
                         buf = BytesIO()
                         img.save(buf, format="PNG")
                         buf.seek(0)
