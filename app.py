@@ -6,7 +6,6 @@ import base64
 import time
 import random
 import smtplib
-import re  # NÜKLEER TEMİZLİK İÇİN GEREKLİ
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
@@ -20,12 +19,12 @@ try:
     EMAIL_USER = st.secrets["EMAIL_USER"]
     EMAIL_PASSWORD = st.secrets["EMAIL_PASSWORD"]
 except:
-    st.error("⚠️ Secrets Hatası! Lütfen API anahtarlarını kontrol et.")
+    st.error("⚠️ Eksik Anahtarlar! Lütfen Streamlit Secrets ayarlarını kontrol et.")
     st.stop()
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(
-    page_title="Fallink Studio v2.5",
+    page_title="Fallink Studio",
     page_icon="✒️",
     layout="centered",
     initial_sidebar_state="collapsed"
@@ -41,7 +40,7 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- CSS TASARIM ---
+# --- CSS TASARIM (PREMIUM) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
@@ -51,232 +50,3 @@ st.markdown("""
         background-color: #FAFAFA;
         color: #111;
     }
-    
-    .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
-        background-color: #FFFFFF !important; 
-        color: #000000 !important;
-        border: 1px solid #d1d1d1 !important;
-        border-radius: 8px !important;
-    }
-    
-    .main-title {
-        font-size: 2.5rem;
-        font-weight: 800;
-        text-align: center;
-        margin-bottom: 0.5rem;
-        color: #111;
-    }
-    
-    .stButton > button {
-        background-color: #111 !important;
-        color: white !important;
-        border-radius: 10px !important;
-        padding: 10px 20px !important;
-        border: none !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# --- FONKSİYONLAR ---
-
-def sanitize_ascii(text):
-    """Metindeki ASCII olmayan her şeyi (emojiler, özel harfler) siler."""
-    if text:
-        # Sadece İngilizce harfler, rakamlar ve temel sembolleri bırak
-        return re.sub(r'[^\x00-\x7F]+', '', text).strip()
-    return ""
-
-def send_email_with_design(to_email, img_buffer, prompt):
-    # 1. Girdileri Zorla Temizle (ASCII Zorunluluğu)
-    safe_email = sanitize_ascii(to_email)
-    safe_prompt = sanitize_ascii(prompt) # Prompttaki emojileri de siler
-    
-    msg = MIMEMultipart()
-    msg['From'] = EMAIL_USER
-    msg['To'] = safe_email
-    msg['Subject'] = "Your Fallink Tattoo Design" # Emoji YOK, sadece düz yazı
-    
-    # Body kısmını HTML ve UTF-8 olarak ayarla
-    body = f"""
-    <html>
-      <body>
-        <h2>Your Design is Here!</h2>
-        <p>Here is the tattoo stencil you created with Fallink.</p>
-        <p><strong>Idea:</strong> {safe_prompt}</p>
-        <br>
-        <p>Fallink Team</p>
-      </body>
-    </html>
-    """
-    
-    msg.attach(MIMEText(body, 'html', 'utf-8'))
-
-    # Resmi Ekle
-    image_data = img_buffer.getvalue()
-    image = MIMEImage(image_data, name="design.png")
-    msg.attach(image)
-
-    try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(EMAIL_USER, EMAIL_PASSWORD)
-        server.send_message(msg)
-        server.quit()
-        return True, "Email sent successfully!"
-    except Exception as e:
-        return False, str(e)
-
-def check_user_credits(username):
-    try:
-        username = sanitize_ascii(username)
-        response = supabase.table("users").select("*").eq("username", username).execute()
-        if response.data:
-            return response.data[0]["credits"]
-        return -1
-    except:
-        return -1
-
-def deduct_credit(username, current_credits):
-    try:
-        new_credit = current_credits - 1
-        supabase.table("users").update({"credits": new_credit}).eq("username", username).execute()
-        return new_credit
-    except:
-        return current_credits
-
-def get_image_download_link(img, filename, text):
-    buffered = BytesIO()
-    img.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode()
-    return f'<a href="data:file/png;base64,{img_str}" download="{filename}" style="text-decoration:none; color:#007AFF; font-weight:600;">📥 {text}</a>'
-
-def generate_tattoo_stencil(user_prompt, style, placement):
-    try:
-        client = genai.Client(api_key=GOOGLE_API_KEY)
-        
-        # Prompt Temizliği
-        clean_user_prompt = sanitize_ascii(user_prompt)
-        
-        base_prompt = f"Professional tattoo stencil design of: {clean_user_prompt}. Placement: {placement}."
-        style_prompt = f"Style: {style}. Requirements: Clean white background, high contrast black ink, isolated subject, vector style, no skin texture."
-        final_prompt = f"{base_prompt} {style_prompt}"
-
-        response = client.models.generate_images(
-            model="imagen-4.0-generate-001", 
-            prompt=final_prompt,
-            config={"number_of_images": 1, "aspect_ratio": "1:1"}
-        )
-        
-        if response.generated_images:
-            image_bytes = response.generated_images[0].image.image_bytes
-            img = Image.open(BytesIO(image_bytes))
-            return img, None
-        return None, "AI returned empty response."
-    except Exception as e:
-        return None, str(e)
-
-# --- UYGULAMA AKIŞI ---
-
-if "generated_img" not in st.session_state:
-    st.session_state["generated_img"] = None
-    st.session_state["last_prompt"] = ""
-
-# 1. LOGIN
-if "logged_in_user" not in st.session_state:
-    st.markdown("<div style='margin-top: 50px;'></div>", unsafe_allow_html=True)
-    st.markdown("<h1 class='main-title'>Fallink v2.5</h1>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        with st.container(border=True):
-            username_input = st.text_input("Access Code", placeholder="Enter code...")
-            if st.button("Enter Studio", use_container_width=True):
-                safe_username = sanitize_ascii(username_input)
-                credits = check_user_credits(safe_username)
-                if credits == -1:
-                    st.error("Invalid code.")
-                else:
-                    st.session_state["logged_in_user"] = safe_username
-                    st.session_state["credits"] = credits
-                    st.rerun()
-    st.stop()
-
-# 2. STÜDYO ARAYÜZÜ
-user = st.session_state["logged_in_user"]
-credits = check_user_credits(user)
-
-c1, c2 = st.columns([3,1])
-with c1:
-    st.markdown(f"**Member:** {user}")
-with c2:
-    st.markdown(f"**Credits:** {credits} 💎")
-
-st.markdown("---")
-
-c_left, c_right = st.columns([1.5, 1])
-
-with c_left:
-    user_prompt = st.text_area("Describe your tattoo idea", height=150, placeholder="E.g. A geometric wolf head...")
-    if st.button("🎲 Random Idea"):
-        ideas = ["Minimalist paper plane", "Snake wrapped around dagger", "Realistic eye crying galaxy", "Geometric deer head"]
-        user_prompt = random.choice(ideas)
-        st.info(f"Try: {user_prompt}")
-
-with c_right:
-    style = st.selectbox("Style", ("Fine Line", "Micro Realism", "Dotwork", "Old School", "Sketch", "Tribal"))
-    placement = st.selectbox("Placement", ("Arm", "Leg", "Chest", "Back", "Wrist"))
-    
-    if st.button("Generate Ink ✨ (1 Credit)", type="primary", use_container_width=True):
-        if credits < 1:
-            st.error("No credits left!")
-        elif not user_prompt:
-            st.warning("Please describe an idea.")
-        else:
-            with st.spinner("Designing..."):
-                new_credits = deduct_credit(user, credits)
-                safe_prompt = sanitize_ascii(user_prompt)
-                img, err = generate_tattoo_stencil(safe_prompt, style, placement)
-                if img:
-                    st.session_state["generated_img"] = img
-                    st.session_state["last_prompt"] = safe_prompt
-                    st.session_state["credits"] = new_credits
-                    st.rerun()
-                else:
-                    st.error(err)
-
-# 3. SONUÇ VE EMAIL ALANI
-if st.session_state["generated_img"]:
-    st.markdown("---")
-    st.markdown("### Your Design")
-    
-    img = st.session_state["generated_img"]
-    st.image(img, caption="Fallink AI Design", width=400)
-    
-    col_d1, col_d2 = st.columns(2)
-    
-    with col_d1:
-        st.markdown(get_image_download_link(img, "design.png", "Download Image"), unsafe_allow_html=True)
-    
-    with col_d2:
-        with st.expander("📧 Email this design"):
-            customer_email = st.text_input("Customer Email", placeholder="client@example.com")
-            if st.button("Send Email"):
-                if customer_email:
-                    # Girdiyi temizle
-                    safe_email = sanitize_ascii(customer_email)
-                    
-                    with st.spinner("Sending email..."):
-                        buf = BytesIO()
-                        img.save(buf, format="PNG")
-                        buf.seek(0)
-                        
-                        success, msg = send_email_with_design(safe_email, buf, st.session_state["last_prompt"])
-                        if success:
-                            st.success(f"Email sent to {safe_email}! 📨")
-                        else:
-                            st.error(f"Error: {msg}")
-                else:
-                    st.warning("Enter an email address.")
-
-# --- SÜRÜM KONTROLÜ (EN ALTTA YAZACAK) ---
-st.markdown("<br><hr><center><small style='color:grey'>Fallink App v2.5 (Nuclear Fix)</small></center>", unsafe_allow_html=True)
