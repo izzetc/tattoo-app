@@ -40,14 +40,14 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- CSS TASARIM ---
+# --- CSS TASARIM (IFRAME UYUMLU) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
-        background-color: #FAFAFA;
+        background-color: #FAFAFA; /* Sitenin arka plan rengiyle aynı olsun */
         color: #111;
     }
     
@@ -58,37 +58,28 @@ st.markdown("""
         border: 1px solid #d1d1d1 !important;
         border-radius: 8px !important;
     }
-    
-    .main-title {
-        font-size: 2.5rem;
-        font-weight: 800;
-        text-align: center;
-        margin-bottom: 0.5rem;
-        color: #111;
+
+    /* --- STREAMLIT ARAYÜZÜNÜ GİZLEME (TEMİZLİK) --- */
+    /* Üstteki renkli çizgiyi ve header'ı gizle */
+    header {visibility: hidden;}
+    /* En alttaki 'Made with Streamlit' yazısını gizle */
+    footer {visibility: hidden;}
+    /* Sağ üstteki hamburger menüyü gizle */
+    #MainMenu {visibility: hidden;}
+    /* Sayfa kenar boşluklarını sıfırla ki sitene tam otursun */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
     }
     
-    /* Standart Butonlar */
+    /* Butonlar */
     .stButton > button {
         background-color: #111 !important;
         color: white !important;
         border-radius: 10px !important;
-        padding: 10px 20px !important;
-        border: none !important;
-        font-weight: 600 !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-    }
-    .stButton > button:hover {
-        background-color: #333 !important;
-        transform: translateY(-2px);
-    }
-
-    /* Refine (Düzenleme) Kutusu Stili */
-    .refine-box {
-        background-color: #f0f2f6;
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #e0e0e0;
-        margin-top: 20px;
+        width: 100%; /* Buton tam genişlikte olsun */
     }
 </style>
 """, unsafe_allow_html=True)
